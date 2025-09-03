@@ -112,6 +112,29 @@ public class EventRegistry {
 		ObsArtListChangedEvent ev = new ObsArtListChangedEvent(id, newFocused, noMoreFocused);
 		return ev;
 	}
-	
+
+	public ArtifactCreatedEvent makeArtifactCreatedEvent(ArtifactId aid){
+		long id = nextTimestamp.incrementAndGet();
+		var ev = new ArtifactCreatedEvent(id, aid);
+		return ev;
+	}
+
+	public ArtifactRemovedEvent makeArtifactRemovedEvent(ArtifactId aid){
+		long id = nextTimestamp.incrementAndGet();
+		var ev = new ArtifactRemovedEvent(id, aid);
+		return ev;
+	}
+
+	public WorkspaceCreatedEvent makeWspCreatedEvent(WorkspaceId aid){
+		long id = nextTimestamp.incrementAndGet();
+		var ev = new WorkspaceCreatedEvent(id, aid);
+		return ev;
+	}
+
+	public WorkspaceRemovedEvent makeArtifactRemovedEvent(WorkspaceId aid){
+		long id = nextTimestamp.incrementAndGet();
+		var ev = new WorkspaceRemovedEvent(id, aid);
+		return ev;
+	}
 
 }

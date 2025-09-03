@@ -17,16 +17,9 @@
  */
 package cartago;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.URI;
-import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 import cartago.standalone.AgentSession;
 import cartago.tools.inspector.Inspector;
@@ -44,11 +37,13 @@ public class CartagoEnvironmentStandalone {
 	/* singleton design */
 	private static CartagoEnvironmentStandalone instance;
 			
-	private HashMap<String,Inspector> debuggers;
+	private Inspector inspector;
 	
 	private Workspace wsp;
 	
 	public static String WSP_DEFAULT_NAME = "main";
+	
+	private List<ConceptualSpaceMapping> csMappings ;
 	
 	public static CartagoEnvironmentStandalone getInstance() {
 		synchronized (CartagoEnvironmentStandalone.class) {
@@ -60,10 +55,14 @@ public class CartagoEnvironmentStandalone {
 	}
 	
 	private CartagoEnvironmentStandalone() {
-		debuggers = new HashMap<String,Inspector>();
+		csMappings = new ArrayList<ConceptualSpaceMapping>();
 	}
 	
-	/* Init methods -- Standalone or Infrastructure workspace */
+	/*
+	 * 
+	 *  Init methods -- Standalone or Infrastructure workspace 
+	 *  
+	 */
 	
 	/**
 	 * 
@@ -73,19 +72,17 @@ public class CartagoEnvironmentStandalone {
 	 * 
 	 * @param logger logger to be used
 	 */
-	public void initWsp(String wspName, Optional<ICartagoLogger> logger) {
+	public void initWsp(String wspName) {
 		WorkspaceId id = new WorkspaceId(wspName);
-		wsp = new Workspace(id, logger);
-	}
-
-	/**
-	 * 
-	 * Initialise the workspace as standalone, using the default name
-	 * 
-	 * @param logger logger to be used
-	 */
-	public void initWsp(Optional<ICartagoLogger> logger) {
-		this.initWsp(WSP_DEFAULT_NAME, logger);
+		wsp = new Workspace(id);
+		for (var m: csMappings) {
+			try {
+				wsp.registerMapping(m);
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			}
+		}
+		wsp.init();
 	}
 
 	/**
@@ -94,10 +91,9 @@ public class CartagoEnvironmentStandalone {
 	 * 
 	 */
 	public void initWsp() {
-		this.initWsp(WSP_DEFAULT_NAME, Optional.empty());
+		this.initWsp(WSP_DEFAULT_NAME);
 	}
-
-			
+		
 	/**
 	 * 
 	 * Get the workspace.
@@ -139,34 +135,37 @@ public class CartagoEnvironmentStandalone {
 	 * @return Session object
 	 * @throws CartagoException
 	 */
-	public synchronized IAgentSession startSession(AgentCredential cred, ICartagoListener eventListener) throws CartagoException {
-			AgentSession session = new AgentSession(cred,null,eventListener);
-			ICartagoContext ctx = wsp.joinWorkspace(cred, session);
-			session.init(CartagoEnvironmentStandalone.getInstance().getWorkspace().getId(), ctx);
-			return session;
+	public IAgentSession startSession(AgentCredential cred, ICartagoListener eventListener) throws CartagoException {
+		AgentSession session = new AgentSession(cred,null,eventListener);
+		ICartagoContext ctx = wsp.joinWorkspace(cred, session);
+		session.init(CartagoEnvironmentStandalone.getInstance().getWorkspace().getId(), ctx);
+		return session;
 	}
 	
-		
+	/* CS mapping */
+	
+	public void registerCSMapping(ConceptualSpaceMapping cs) {
+		this.csMappings.add(cs);
+	}
+	
 	/* factory management */
 	
 	/**
 	 * Add an artifact factory for artifact templates
 	 * 
-	 * @param wspName workspace name
 	 * @param factory artifact factory
 	 * @throws CartagoException
 	 */
-	public synchronized void addArtifactFactory(String wspName, ArtifactFactory factory) throws CartagoException {
+	public void addArtifactFactory(ArtifactFactory factory) throws CartagoException {
 		wsp.addArtifactFactory(factory);
 	}
 	
 	/**
 	 * Remove an existing class loader for artifacts
-	 * @param wspName workspace name
 	 * @param name id of the artifact factory
 	 * @throws CartagoException
 	 */
-	public synchronized void removeArtifactFactory(String wspName, String name) throws CartagoException {
+	public void removeArtifactFactory(String name) throws CartagoException {
 		wsp.removeArtifactFactory(name);
 	}
 
@@ -177,39 +176,33 @@ public class CartagoEnvironmentStandalone {
 	 * @param logger
 	 * @throws CartagoException
 	 */
-	public synchronized void registerLogger(String wspName, ICartagoLogger logger) throws CartagoException {
+	public void registerLogger(ICartagoLogger logger) throws CartagoException {
 		wsp.registerLogger(logger);
 	}
 
-	/* debugging */
+	/* inspector */
 	
 	/**
-	 * Enable debugging of a CArtAgO Workspace 
+	 * Enable inpector 
 	 * 
 	 * @param wspName
 	 * @throws CartagoException
 	 */
-	public synchronized void enableDebug(String wspName) throws CartagoException {
-		Inspector insp = debuggers.get(wspName);
-		 if (insp == null){
-			insp = new Inspector();
-			insp.start();
-			registerLogger(wspName, insp.getLogger());
-			debuggers.put(wspName, insp);
+	public void enableInspector() throws CartagoException {
+		 if (inspector == null){
+			 inspector = new Inspector();
+			 inspector.start();
+			registerLogger(inspector.getLogger());
 		}
 	}
 	
 	/**
-	 * Disable debugging of a CArtAgO Workspace 
+	 * Disable inspector 
 	 * 
-	 * @param wspName
 	 * @throws CartagoException
 	 */
-	public synchronized void disableDebug(String wspName) throws CartagoException {
-			 Inspector insp = debuggers.remove(wspName);
-			 if (insp != null){
-				 wsp.unregisterLogger(insp.getLogger());
-			 }
+	public void disableDebug() throws CartagoException {
+		inspector = null;
 	}
 	
 	
@@ -219,24 +212,21 @@ public class CartagoEnvironmentStandalone {
 	 * 
 	 * Unregister a logger 
 	 * 
-	 * @param wspName
 	 * @param logger
 	 * @throws CartagoException
 	 */
-	public synchronized void unregisterLogger(String wspName, ICartagoLogger logger) throws CartagoException {
+	public void unregisterLogger(ICartagoLogger logger) throws CartagoException {
 		wsp.unregisterLogger(logger);
 	}	
 	
 	/**
 	 * Getting a controller.
 	 * 
-	 * @param wspName
 	 * @return
 	 * @throws CartagoException
 	 */
-	public synchronized ICartagoController  getController(String wspName) throws CartagoException {
+	public ICartagoController  getController() throws CartagoException {
 		return wsp.getController();
 	}
-	
 
 }

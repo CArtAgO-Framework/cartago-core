@@ -39,8 +39,12 @@ import java.util.concurrent.TimeUnit;
 import cartago.events.ActionFailedEvent;
 import cartago.events.ActionSucceededEvent;
 import cartago.events.ArtifactObsEvent;
+import cartago.events.ArtifactRemovedEvent;
 import cartago.events.FocussedArtifactDisposedEvent;
+import cartago.events.ArtifactCreatedEvent;
 import cartago.events.ObsArtListChangedEvent;
+import cartago.events.WorkspaceCreatedEvent;
+import cartago.events.WorkspaceRemovedEvent;
 import cartago.security.IWorkspaceSecurityManager;
 import cartago.security.NullSecurityManager;
 import cartago.security.SecurityException;
@@ -91,12 +95,17 @@ public class Workspace {
 		
 	private ArtifactId wspArtifactId;
 	
+	/* conceptual space support */
+	private List<ConceptualSpaceMapping> csMappings;
+	
+	
+	
 	/**
 	 * Create an  workspace
 	 * 
 	 * @param name logic name of the environment
 	 */
-	public Workspace(WorkspaceId id, Optional<ICartagoLogger> logger){
+	public Workspace(WorkspaceId id){
 		
 		this.id = id;
 									
@@ -115,13 +124,18 @@ public class Workspace {
 		artifactFactories = new LinkedList<ArtifactFactory>();
 		artifactFactories.addFirst(new DefaultArtifactFactory());
 		
-		ctxIds = 0;
-		wspManager = new AgentBody(new AgentId("workspace-manager", UUID.randomUUID().toString(), ctxIds++, "WorkspaceManager", getId()),null, this,null);
-
-			
+		csMappings = new ArrayList<ConceptualSpaceMapping>();
+		
 		securityManager = DEFAULT_SECURITY_MANAGER;
 		logManager = DEFAULT_LOGGER_MANAGER;		
 
+		ctxIds = 0;
+	}
+
+	
+	public void init() {
+		wspManager = new AgentBody(new AgentId("workspace-manager", UUID.randomUUID().toString(), ctxIds++, "WorkspaceManager", getId()),null, this,null);
+			
 		nBusyControllers = 0;
 		controllers = new ArrayList<EnvironmentController>();
 		int nInitialControllers = Runtime.getRuntime().availableProcessors();
@@ -131,11 +145,13 @@ public class Workspace {
 			controller.start();
 		}
 
-		if (logger.isPresent()){  
-			logManager.registerLogger(logger.get());
-		}
 		// creating the basic set of artifacts
 
+		/* aligning the Conceptual Spaces */
+		
+		var ev = eventRegistry.makeWspCreatedEvent(id);
+		this.alignConceptualSpaces(ev);
+		
 		try {
 			wspArtifactId = makeArtifact(wspManager.getAgentId(),"workspace", "cartago.WorkspaceArtifact", new ArtifactConfig(this));
 			makeArtifact(wspManager.getAgentId(),"system", "cartago.SystemArtifact", new ArtifactConfig());
@@ -418,7 +434,11 @@ public class Workspace {
 			ArtifactDescriptor desc = new ArtifactDescriptor(artifact, creatorId, adapter);
 
 			synchronized (artifactMap){
-				artifactMap.put(name,desc);
+				artifactMap.put(name,desc);				
+
+				/* Conceptual Spaces alignment */
+				var ev = eventRegistry.makeArtifactCreatedEvent(id);
+				alignConceptualSpaces(ev);
 			}
 
 			try {
@@ -447,6 +467,9 @@ public class Workspace {
 			} catch (Exception ex){
 				synchronized (artifactMap){
 					artifactMap.remove(name);
+					/* Conceptual Spaces alignment */
+					var ev = eventRegistry.makeArtifactRemovedEvent(id);
+					alignConceptualSpaces(ev);
 				}
 				throw new ArtifactConfigurationFailedException(template);
 			}
@@ -504,6 +527,10 @@ public class Workspace {
 					}
 				}
 			}
+			/* Conceptual Spaces alignment */
+			var ev = eventRegistry.makeArtifactRemovedEvent(id);
+			alignConceptualSpaces(ev);
+			
 		}
 		//log(">>>> DISPOSE "+id.getName()+" --> "+retid +" "+ desid);
 		try {
@@ -1017,6 +1044,10 @@ public class Workspace {
 				wspRuleEngine.processSignal(signal);
 			}
 		}
+		
+		/* triggering CS mappings */
+		
+		alignConceptualSpaces(ev);
 	}
 
 	
@@ -1080,6 +1111,74 @@ public class Workspace {
 			ex.printStackTrace();
 			return;
 		}
+	}
+	
+	/***********************************************************************************************
+	 * 
+	 * Methods for Conceptual Space Mappings 
+	 * 
+	 ***********************************************************************************************/
+	
+	/**
+	 * 
+	 * Register a new conceptual space mapping
+	 * 
+	 * @param logger
+	 */
+	public   void registerMapping(ConceptualSpaceMapping m) throws Exception {
+		for (var maps: csMappings) {
+			if (maps.getId().equals(m.getId())) {
+				throw new Exception("CS Mappint Id already present");
+			}
+		}
+		this.csMappings.add(m);
+	}
+
+	/**
+	 * 
+	 * Remove a mapping.
+	 * 
+	 * @param logger
+	 */
+	public   void unregisterMapping(String id){
+		var it = csMappings.iterator();
+		while (it.hasNext()) {
+			var map = it.next();
+			if (map.getId().equals(id)) {
+				it.remove();
+				return;
+			}
+		}
+	}		
+	
+	private void alignConceptualSpaces(ArtifactObsEvent ev) {
+		for (var m: csMappings) {
+			m.alignCS(this, ev);
+		}		
+	}
+
+	private void alignConceptualSpaces(ArtifactCreatedEvent ev) {
+		for (var m: csMappings) {
+			m.alignCS(this, ev);
+		}		
+	}
+
+	private void alignConceptualSpaces(ArtifactRemovedEvent ev) {
+		for (var m: csMappings) {
+			m.alignCS(this, ev);
+		}		
+	}
+
+	private void alignConceptualSpaces(WorkspaceCreatedEvent ev) {
+		for (var m: csMappings) {
+			m.alignCS(this, ev);
+		}		
+	}
+
+	private void alignConceptualSpaces(WorkspaceRemovedEvent ev) {
+		for (var m: csMappings) {
+			m.alignCS(this, ev);
+		}		
 	}
 
 	/***********************************************************************************************

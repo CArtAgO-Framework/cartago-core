@@ -15,6 +15,8 @@ public class ObsPropMap implements IObsPropMap {
 	private ArrayList<ObsProperty> propsAdded;
 	private ArrayList<ObsProperty> propsRemoved;
 
+	private static ArtifactObsProperty[] EMPTY_LIST = new ArtifactObsProperty[0];
+	
 	public ObsPropMap(){
 		props = new ConcurrentHashMap<String,List<ObsProperty>>();
 		propsChanged = new ArrayList<ObsProperty>();
@@ -154,7 +156,7 @@ public class ObsPropMap implements IObsPropMap {
 			}
 			return v;
 		} else {
-			return null;
+			return EMPTY_LIST;
 		}
 	}
 	
@@ -166,7 +168,7 @@ public class ObsPropMap implements IObsPropMap {
 			}
 			return v;
 		} else {
-			return null;
+			return EMPTY_LIST;
 		}
 	}
 
@@ -178,7 +180,7 @@ public class ObsPropMap implements IObsPropMap {
 			}
 			return v;
 		} else {
-			return null;
+			return EMPTY_LIST;
 		}
 	}
 	
